@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>TSA Admin — Visual Editor</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="/assets/supabase-config.js"></script>
+<script src="/assets/supabase-client.js"></script>
+<style>
+*{box-sizing:border-box}html,body{margin:0;height:100%;font-family:Arial,sans-serif;background:#101010;color:#fff}button,input,textarea,select{font:inherit}button{cursor:pointer;border:0;border-radius:9px;font-weight:700}.top{height:64px;background:#171717;border-bottom:1px solid #333;display:flex;align-items:center;gap:10px;padding:10px 14px;position:relative;z-index:20}.brand{font-weight:800;white-space:nowrap}.sub{font-size:12px;color:#aaa}.spacer{flex:1}.page{background:#262626;color:#fff;border:1px solid #444;padding:9px 12px}.primary{background:#d49a16;color:#17120a;padding:10px 15px}.secondary{background:#333;color:#fff;padding:10px 15px}.danger{background:#3a2020;color:#ffb0b0;padding:9px 12px}.login{min-height:100%;display:flex;align-items:center;justify-content:center;padding:24px;background:linear-gradient(160deg,#3e1750,#221c10)}.login-card{max-width:460px;background:#fff;color:#161616;border-radius:16px;padding:32px;text-align:center;box-shadow:0 20px 60px #0006}.login-card h1{margin:0 0 8px}.login-card p{color:#666;line-height:1.6}.login-card button{background:#b8790a;color:#fff;padding:13px 18px}.workspace{height:calc(100% - 64px);display:grid;grid-template-columns:minmax(0,1fr) 360px}.preview{background:#333;position:relative;overflow:hidden}.preview iframe{width:100%;height:100%;border:0;background:#fff}.side{background:#171717;border-left:1px solid #333;overflow:auto;padding:16px}.side h2{font-size:18px;margin:0 0 8px}.hint{font-size:12px;color:#999;line-height:1.5}.status{font-size:12px;color:#bdbdbd}.section{margin:18px 0;border-top:1px solid #333;padding-top:16px}.field{margin:12px 0}.field label{display:block;font-size:12px;font-weight:700;color:#ddd;margin-bottom:6px}.field input,.field textarea,.field select{width:100%;background:#222;color:#fff;border:1px solid #444;border-radius:8px;padding:10px}.field textarea{min-height:180px;resize:vertical;line-height:1.6;white-space:pre-wrap;overflow:auto}.actions{display:flex;gap:8px;flex-wrap:wrap}.preview-note{position:absolute;left:12px;bottom:12px;background:#111e;color:#fff;padding:7px 10px;border-radius:8px;font-size:12px;pointer-events:none}.empty{color:#999;text-align:center;padding:30px 10px}.thumb{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:8px;background:#222;margin:6px 0 10px}.check{display:flex;gap:8px;align-items:center;font-size:12px;color:#bbb}.mobile{width:390px;margin:auto}.mobile iframe{box-shadow:0 0 0 1px #555}
+@media(max-width:900px){.workspace{grid-template-columns:1fr}.side{position:absolute;right:0;top:64px;bottom:0;width:min(360px,92vw);z-index:15;box-shadow:-20px 0 60px #0008}.preview{height:calc(100vh - 64px)}.brand{font-size:13px}.sub{display:none}}
+</style>
+</head>
+<body>
+<div id="login" class="login"><div class="login-card"><h1>Triumphant Standard Academy</h1><p>Admin Visual Editor</p><p>Edit website content directly on the real page. The site's structure and design remain locked.</p><button id="loginBtn">Sign in as administrator</button></div></div>
+<div id="editor" style="display:none;height:100%">
+  <div class="top">
+    <div><div class="brand">TSA Visual Editor</div><div class="sub">Content only • design & structure locked</div></div>
+    <div class="spacer"></div>
+    <select id="page" class="page">
+      <option value="index.html">Home</option><option value="about.html">About</option><option value="academics.html">Academics</option><option value="admissions.html">Admissions</option><option value="administration.html">Administration</option><option value="contact.html">Contact</option><option value="news.html">News</option><option value="gallery.html">Gallery</option>
+    </select>
+    <button id="reload" class="secondary">Reload</button><button id="manageAdmins" class="secondary" style="display:none">Manage admins</button><button id="publish" class="primary">Publish changes</button><button id="logout" class="danger">Log out</button>
+  </div>
+  <div class="workspace">
+    <div id="preview" class="preview"><iframe id="site" title="Website preview"></iframe><div class="preview-note">Edit mode — click text or images</div></div>
+    <aside class="side"><h2 id="sideTitle">Select something</h2><div id="sideBody" class="hint">Click any editable text or image in the website preview. Your changes stay as a draft until you press Publish changes.</div><div id="sideActions"></div></aside>
+  </div>
+</div>
+<div id="adminModal" style="display:none;position:fixed;inset:0;background:#000b;z-index:100;align-items:center;justify-content:center;padding:18px">
+  <div style="width:min(680px,96vw);max-height:90vh;overflow:auto;background:#171717;border:1px solid #444;border-radius:14px;padding:20px;box-shadow:0 20px 80px #000">
+    <div style="display:flex;align-items:center;gap:10px"><div style="font-size:20px;font-weight:800;flex:1">Manage administrators</div><button id="closeAdminModal" class="danger">Close</button></div>
+    <p class="hint" style="margin:10px 0 18px">Admins can edit all website content. Only Super Admins can add, remove or change administrator roles. Maximum 5 Super Admins. New administrators can now be invited directly from this panel.</p>
+    <div class="section">
+      <h3 style="margin:0 0 10px">Add administrator</h3>
+      <div class="field"><label>Name (optional)</label><input id="newAdminName" placeholder="Full name"></div>
+      <div class="field"><label>Email</label><input id="newAdminEmail" type="email" placeholder="admin@example.com"></div>
+      <div class="field"><label>Role</label><select id="newAdminRole"><option value="admin">Admin — edit all content</option><option value="superadmin">Super Admin — edit + manage admins</option></select></div>
+      <div class="actions"><button id="addAdmin" class="primary">Add administrator</button></div>
+      <div id="adminMessage" class="hint" style="margin-top:10px"></div>
+    </div>
+    <div class="section"><h3 style="margin:0 0 10px">Current administrators</h3><div id="adminList"><div class="empty">Loading…</div></div></div>
+  </div>
+</div>
+<input id="fileInput" type="file" accept="image/*,video/mp4,video/webm,video/ogg,video/quicktime" style="display:none">
+<script>
+(function(){
+const pages=['index.html','about.html','academics.html','admissions.html','administration.html','contact.html','news.html','gallery.html'];
+const pageSection={'index.html':'index','about.html':'about','academics.html':'academics','admissions.html':'admissions','administration.html':'administration','contact.html':'contact','news.html':'news','gallery.html':'gallery'};
+let draft={},currentSection='index',pendingImage=null,dirty=false,startInProgress=false,editorStarted=false,currentRole='none',frameReady=false,frameBound=false,loadingPage=false;
+const $=id=>document.getElementById(id);
+const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+async function token(){
+  const {data:{session}}=await window.tsaSupabase.auth.getSession();
+  if(!session)throw Error('Please sign in.');
+  return session.access_token;
+}
+async function getAll(){
+  const {data,error}=await window.tsaSupabase.from('site_content').select('section,content');
+  if(error)throw Error('Content service error: '+error.message);
+  const out={};(data||[]).forEach(row=>out[row.section]=row.content||{});return out;
+}
+async function save(section,data){
+  const {error}=await window.tsaSupabase.from('site_content').upsert({section:section,content:data},{onConflict:'section'});
+  if(error)throw Error('Save failed: '+error.message);
+}
+function imageProfile(p){
+  if(p?.kind==='gallery')return {name:'Gallery',maxW:1600,maxH:1200,target:450*1024};
+  if(p?.kind==='news')return {name:'News',maxW:1200,maxH:800,target:300*1024};
+  if(p?.kind==='staff')return {name:'Staff photo',maxW:800,maxH:800,target:200*1024};
+  if(p?.kind==='slideshow')return {name:'Home slideshow',maxW:1600,maxH:900,target:450*1024};
+  if(currentSection==='about')return {name:'About',maxW:1400,maxH:900,target:350*1024};
+  return {name:'Website image',maxW:1600,maxH:900,target:400*1024};
+}
+async function optimizeImage(file,p){
+  if(file.size>50*1024*1024)throw Error('Image is too large to process. Please choose an image under 50 MB.');
+  if(!file.type||!file.type.startsWith('image/'))return file;
+  const profile=imageProfile(p);
+  const bitmap=await createImageBitmap(file);
+  let w=bitmap.width,h=bitmap.height;
+  const scale=Math.min(1,profile.maxW/w,profile.maxH/h);
+  w=Math.max(1,Math.round(w*scale));h=Math.max(1,Math.round(h*scale));
+  const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
+  const ctx=canvas.getContext('2d',{alpha:true});
+  ctx.drawImage(bitmap,0,0,w,h);bitmap.close?.();
+  const mime='image/webp';
+  let quality=0.82, blob=null;
+  for(let pass=0;pass<8;pass++){
+    blob=await new Promise(resolve=>canvas.toBlob(resolve,mime,quality));
+    if(!blob)throw Error('The browser could not process this image.');
+    if(blob.size<=profile.target || quality<=0.45)break;
+    quality-=0.06;
+  }
+  // If a very detailed image is still above target, reduce dimensions a little more.
+  for(let pass=0;pass<4 && blob.size>profile.target;pass++){
+    w=Math.max(640,Math.round(w*0.9));h=Math.max(480,Math.round(h*0.9));
+    canvas.width=w;canvas.height=h;ctx.drawImage(await createImageBitmap(file),0,0,w,h);
+    blob=await new Promise(resolve=>canvas.toBlob(resolve,mime,0.72));
+    if(!blob)break;
+  }
+  const base=String(file.name||'media').replace(/\.[^.]+$/,'')||'media';
+  return new File([blob],base+'.webp',{type:mime,lastModified:Date.now()});
+}
+async function upload(file){
+  const isVideo=file.type&&file.type.startsWith('video/');
+  if(isVideo&&file.size>4*1024*1024)throw Error('Video is too large. Please choose a video under 4 MB.');
+  const safe=String(file.name||'media').toLowerCase().replace(/[^a-z0-9._-]+/g,'-').replace(/^-+|-+$/g,'')||'media';
+  const path='media/'+Date.now()+'-'+Math.random().toString(36).slice(2,10)+'-'+safe;
+  const {error}=await window.tsaSupabase.storage.from('tsa-media').upload(path,file,{cacheControl:'31536000',contentType:file.type||undefined,upsert:false});
+  if(error)throw Error('Media upload failed: '+error.message);
+  const {data}=window.tsaSupabase.storage.from('tsa-media').getPublicUrl(path);
+  if(!data||!data.publicUrl)throw Error('Media URL could not be created.');
+  return data.publicUrl;
+}
+function setSide(title,html){$('sideTitle').textContent=title;$('sideBody').innerHTML=html;$('sideActions').innerHTML='';}
+function markDirty(){dirty=true;$('publish').textContent='Publish changes • unsaved';}
+function sectionData(){if(!draft[currentSection])draft[currentSection]={};return draft[currentSection];}
+function ensureText(key,value){const d=sectionData();if(typeof d[key]!=='string')d[key]=value;return d[key];}
+function actions(html){const a=document.createElement('div');a.className='actions';a.innerHTML=html;$('sideActions').appendChild(a);return a;}
+function selectJourneyDate(msg){
+ const d=sectionData();
+ d.journey_dates=Array.isArray(d.journey_dates)?d.journey_dates:[];
+ const index=Math.max(0,+msg.index||0);
+ while(d.journey_dates.length<index+1)d.journey_dates.push('');
+ setSide('Edit history year','<div class="field"><label>Year</label><input id="journeyYear" inputmode="numeric" value="'+esc(d.journey_dates[index]||'')+'" placeholder="e.g. 2026"></div>');
+ actions('<button class="primary" id="applyJourney">Apply</button><button class="secondary" id="cancelEdit">Cancel</button>');
+ $('applyJourney').onclick=()=>{d.journey_dates[index]=$('journeyYear').value.trim();send({type:'set-journey-dates',dates:d.journey_dates});markDirty();};
+ $('cancelEdit').onclick=showPageTools;
+}
+function selectText(msg){
+ const key=msg.key;ensureText(key,msg.value||'');
+ setSide('Edit text','<div class="field"><label>Website text</label><textarea id="editText" wrap="soft">'+esc(sectionData()[key])+'</textarea></div><div class="hint">You can change the wording. The website design, layout and fonts stay locked.</div>');
+ actions('<button class="primary" id="applyText">Apply to preview</button><button class="secondary" id="cancelEdit">Cancel</button>');
+ $('applyText').onclick=()=>{const v=$('editText').value;sectionData()[key]=v;send({type:'set-text',key,value:v});markDirty();};
+ $('cancelEdit').onclick=showPageTools;
+}
+function selectImage(msg){
+ pendingImage={kind:'static',key:msg.key};
+ const src=msg.src||'';
+ setSide('Edit image',src?'<img class="thumb" src="'+esc(src)+'">':'<div class="empty">No image currently set</div>');
+ $('sideBody').insertAdjacentHTML('beforeend','<p class="hint">Replace, upload or remove this image. Removing it does not change the page layout.</p>');
+ actions('<button class="primary" id="chooseImage">Upload / replace</button><button class="danger" id="removeImage">Remove image</button>');
+ $('chooseImage').onclick=()=>{$('fileInput').value='';pendingImage={kind:'static',key:msg.key};$('fileInput').click()};
+ $('removeImage').onclick=()=>{sectionData()[msg.key]='';send({type:'set-image',key:msg.key,url:''});markDirty();setSide('Image removed','<p class="hint">The image is removed from the draft. Publish to make it live.</p>');};
+}
+function selectSocial(msg){
+ const d=sectionData();d.social=d.social||{};if(typeof d.social[msg.name]!=='string')d.social[msg.name]=msg.url||'';
+ setSide('Social link','<div class="field"><label>'+esc(msg.name)+' URL</label><input id="socialUrl" value="'+esc(d.social[msg.name])+'" placeholder="https://..."></div>');
+ actions('<button class="primary" id="applySocial">Apply</button><button class="danger" id="clearSocial">Remove link</button>');
+ $('applySocial').onclick=()=>{d.social[msg.name]=$('socialUrl').value.trim();send({type:'set-social',name:msg.name,url:d.social[msg.name]});markDirty();};
+ $('clearSocial').onclick=()=>{d.social[msg.name]='';send({type:'set-social',name:msg.name,url:''});markDirty();setSide('Link removed','<p class="hint">Publish to make the change live.</p>');};
+}
+function showSlideshowManager(){
+ const d=sectionData();d.hero_slides=Array.isArray(d.hero_slides)?d.hero_slides:[];d.hero_captions=Array.isArray(d.hero_captions)?d.hero_captions:[];
+ let html='<p class="hint">Add as many slideshow images as you need. Each slide can have its own caption. Remove a slide to take it off the homepage.</p>';
+ if(!d.hero_slides.length)html+='<div class="empty">No slideshow images yet.</div>';
+ d.hero_slides.forEach((url,i)=>{html+='<div class="section"><div class="field"><label>Slide '+(i+1)+'</label>'+(url?'<img class="thumb" src="'+esc(url)+'">':'<div class="empty">No image</div>')+'</div><div class="field"><label>Caption</label><input id="slideCap'+i+'" value="'+esc(d.hero_captions[i]||'')+'"></div><div class="field"><label>Image URL (optional)</label><input id="slideUrl'+i+'" value="'+esc(url||'')+'"></div><div class="actions"><button class="secondary" data-slide-upload="'+i+'">Upload / replace</button><button class="danger" data-slide-remove="'+i+'">Remove</button></div></div>';});
+ setSide('Homepage slideshow',html);actions('<button class="primary" id="addSlide">+ Add slideshow image</button><button class="secondary" id="saveSlides">Apply slideshow changes</button>');
+ d.hero_slides.forEach((_,i)=>{const u=document.querySelector('[data-slide-upload="'+i+'"]');if(u)u.onclick=()=>{$('fileInput').value='';pendingImage={kind:'slideshow',index:i};$('fileInput').click();};const r=document.querySelector('[data-slide-remove="'+i+'"]');if(r)r.onclick=()=>{d.hero_slides.splice(i,1);d.hero_captions.splice(i,1);d.hero_captions=d.hero_captions.slice(0,d.hero_slides.length);send({type:'set-slideshow',slides:d.hero_slides,captions:d.hero_captions});markDirty();showSlideshowManager();};});
+ $('addSlide').onclick=()=>{d.hero_slides.push('');d.hero_captions.push('');markDirty();showSlideshowManager();};
+ $('saveSlides').onclick=()=>{d.hero_slides=d.hero_slides.map((v,i)=>{const el=$('slideUrl'+i);return el?el.value.trim():v;});d.hero_captions=d.hero_captions.map((v,i)=>{const el=$('slideCap'+i);return el?el.value:v;});while(d.hero_captions.length>d.hero_slides.length)d.hero_captions.pop();send({type:'set-slideshow',slides:d.hero_slides,captions:d.hero_captions});markDirty();showSlideshowManager();};
+}
+function selectSlideshow(msg){showSlideshowManager();}
+function selectProgram(msg){
+ const d=draft.programs||(draft.programs={});
+ if(!Array.isArray(d.items)||!d.items.length){
+   d.items=Array.isArray(msg.items)?msg.items.map(x=>({name:x.name||'',intro:x.intro||''})):[];
+ }
+ const i=msg.index;
+ const it=d.items[i]||{name:msg.name||'',intro:msg.intro||''};
+ d.items[i]=it;
+ setSide('Edit program','<div class="field"><label>Program name</label><input id="progName" value="'+esc(it.name)+'"></div><div class="field"><label>Introduction</label><textarea id="progIntro">'+esc(it.intro)+'</textarea></div><div class="hint">This program is shared by the Academics and Home programme sections.</div>');
+ actions('<button class="primary" id="applyProg">Apply</button>');
+ $('applyProg').onclick=()=>{it.name=$('progName').value;it.intro=$('progIntro').value;send({type:'set-program',index:i,name:it.name,intro:it.intro});markDirty();};
+}
+function selectStaff(msg){
+ const d=sectionData();d.administration=Array.isArray(d.administration)?d.administration:[];const i=msg.index;const it=d.administration[i]||{name:msg.name||'',role:msg.role||'',bio:msg.bio||'',image:msg.image||''};d.administration[i]=it;
+ setSide('Edit staff member',(it.image?'<img class="thumb" src="'+esc(it.image)+'">':'<div class="empty">No staff photo</div>')+'<div class="field"><label>Name</label><input id="staffName" value="'+esc(it.name)+'"></div><div class="field"><label>Role</label><input id="staffRole" value="'+esc(it.role)+'"></div><div class="field"><label>Bio</label><textarea id="staffBio">'+esc(it.bio)+'</textarea></div>');
+ actions('<button class="secondary" id="staffChoose">Upload / replace photo</button><button class="danger" id="staffRemoveImage">Remove photo</button><button class="primary" id="applyStaff">Apply staff changes</button><button class="danger" id="removeStaff">Remove staff member</button>');
+ $('applyStaff').onclick=()=>{it.name=$('staffName').value;it.role=$('staffRole').value;it.bio=$('staffBio').value;send({type:'set-staff',index:i,item:it});markDirty();};
+ $('staffChoose').onclick=()=>{$('fileInput').value='';pendingImage={kind:'staff',index:i};$('fileInput').click()};
+ $('staffRemoveImage').onclick=()=>{it.image='';send({type:'set-staff',index:i,item:it});markDirty();selectStaff({index:i,...it});};
+ $('removeStaff').onclick=()=>{if(confirm('Remove this staff member?')){d.administration.splice(i,1);send({type:'rerender-staff',items:d.administration});markDirty();showPageTools();}};
+}
+function selectNews(msg){
+ const d=sectionData();d.items=Array.isArray(d.items)?d.items:[];const i=msg.index;const it=d.items[i]||{title:msg.title||'',date:msg.date||'',category:msg.category||'Announcements',excerpt:msg.excerpt||'',mediaType:msg.mediaType||'',mediaUrl:msg.mediaUrl||''};d.items[i]=it;
+ setSide('Edit news item',(it.mediaUrl?'<img class="thumb" src="'+esc(it.mediaUrl)+'">':'')+'<div class="field"><label>Title</label><input id="newsTitle" value="'+esc(it.title)+'"></div><div class="field"><label>Date</label><input id="newsDate" value="'+esc(it.date)+'"></div><div class="field"><label>Category</label><select id="newsCat"><option>Announcements</option><option>Events</option><option>Academic</option><option>Sports</option></select></div><div class="field"><label>Excerpt</label><textarea id="newsExcerpt">'+esc(it.excerpt)+'</textarea></div><div class="field"><label>Media URL</label><input id="newsMedia" value="'+esc(it.mediaUrl||'')+'"></div>');$('newsCat').value=it.category||'Announcements';
+ actions('<button class="secondary" id="newsChoose">Upload image</button><button class="danger" id="newsRemoveImage">Remove media</button><button class="primary" id="applyNews">Apply</button><button class="danger" id="removeNews">Remove news item</button>');
+ $('applyNews').onclick=()=>{it.title=$('newsTitle').value;it.date=$('newsDate').value;it.category=$('newsCat').value;it.excerpt=$('newsExcerpt').value;it.mediaUrl=$('newsMedia').value.trim();it.mediaType=it.mediaUrl?'image':'';send({type:'rerender-news',items:d.items});markDirty();};
+ $('newsChoose').onclick=()=>{$('fileInput').value='';pendingImage={kind:'news',index:i};$('fileInput').click()};
+ $('newsRemoveImage').onclick=()=>{it.mediaUrl='';it.mediaType='';send({type:'rerender-news',items:d.items});markDirty();selectNews({index:i,...it});};
+ $('removeNews').onclick=()=>{if(confirm('Remove this news item?')){d.items.splice(i,1);send({type:'rerender-news',items:d.items});markDirty();showPageTools();}};
+}
+function selectGallery(msg){
+ const d=sectionData();d.items=Array.isArray(d.items)?d.items:[];const i=msg.index;const it=d.items[i]||{caption:msg.caption||'',category:msg.category||'campus',image:msg.image||'',mediaUrl:msg.mediaUrl||'',mediaType:'image'};d.items[i]=it;const src=it.mediaUrl||it.image||'';
+ setSide('Edit gallery media',(src?(it.mediaType==='video'?'<video class="thumb" controls preload="metadata" src="'+esc(src)+'"></video>':'<img class="thumb" src="'+esc(src)+'">'):'<div class="empty">No media</div>')+'<div class="field"><label>Caption</label><input id="galCaption" value="'+esc(it.caption)+'"></div><div class="field"><label>Category</label><select id="galCat"><option>campus</option><option>academics</option><option>events</option><option>sports</option></select></div><div class="field"><label>Image URL</label><input id="galImage" value="'+esc(src)+'"></div>');$('galCat').value=it.category||'campus';
+ actions('<button class="secondary" id="galChoose">Upload / replace</button><button class="danger" id="galRemoveImage">Remove image</button><button class="primary" id="applyGal">Apply</button><button class="danger" id="removeGal">Remove gallery item</button>');
+ $('applyGal').onclick=()=>{it.caption=$('galCaption').value;it.category=$('galCat').value;it.image=$('galImage').value.trim();it.mediaUrl=it.mediaUrl||it.image;if($('galImage').value.trim()!==src){it.mediaUrl=$('galImage').value.trim();it.mediaType=it.mediaUrl?'image':'';}send({type:'rerender-gallery',items:d.items});markDirty();};
+ $('galChoose').onclick=()=>{$('fileInput').value='';pendingImage={kind:'gallery',index:i};$('fileInput').click()};
+ $('galRemoveImage').onclick=()=>{it.image='';it.mediaUrl='';it.mediaType='';send({type:'rerender-gallery',items:d.items});markDirty();selectGallery({index:i,...it});};
+ $('removeGal').onclick=()=>{if(confirm('Remove this gallery item?')){d.items.splice(i,1);send({type:'rerender-gallery',items:d.items});markDirty();showPageTools();}};
+}
+function showStaffManager(){
+ const d=sectionData();d.administration=Array.isArray(d.administration)?d.administration:[];
+ let html='<p class="hint">Edit every administration/staff member here. Changes remain a draft until you publish.</p>';
+ if(!d.administration.length)html+='<div class="empty">No administration members yet.</div>';
+ d.administration.forEach((it,i)=>{
+   html+='<div class="section"><strong>Staff member '+(i+1)+'</strong>'+
+     (it.image?'<img class="thumb" src="'+esc(it.image)+'">':'<div class="empty">No photo</div>')+
+     '<div class="field"><label>Name</label><input id="mgrStaffName'+i+'" value="'+esc(it.name)+'"></div>'+     '<div class="field"><label>Role / Department</label><input id="mgrStaffRole'+i+'" value="'+esc(it.role)+'"></div>'+     '<div class="field"><label>Bio</label><textarea id="mgrStaffBio'+i+'">'+esc(it.bio)+'</textarea></div>'+     '<div class="actions"><button class="secondary" data-mgr-staff-upload="'+i+'">Upload / replace photo</button><button class="danger" data-mgr-staff-remove-image="'+i+'">Remove photo</button><button class="danger" data-mgr-staff-remove="'+i+'">Remove member</button></div></div>';
+ });
+ setSide('Administration',html);
+ actions('<button class="primary" id="saveStaffManager">Apply all administration changes</button><button class="secondary" id="addStaffFromManager">+ Add staff member</button>');
+ d.administration.forEach((it,i)=>{
+   $('mgrStaffUpload'+i)?.addEventListener('click',()=>{$('fileInput').value='';pendingImage={kind:'staff',index:i};$('fileInput').click();});
+   $('mgrStaffRemoveImage'+i)?.addEventListener('click',()=>{it.image='';send({type:'set-staff',index:i,item:it});markDirty();showStaffManager();});
+   $('mgrStaffRemove'+i)?.addEventListener('click',()=>{if(confirm('Remove this staff member?')){d.administration.splice(i,1);send({type:'rerender-staff',items:d.administration});markDirty();showStaffManager();}});
+ });
+ $('saveStaffManager').onclick=()=>{d.administration.forEach((it,i)=>{it.name=$('mgrStaffName'+i)?.value||'';it.role=$('mgrStaffRole'+i)?.value||'';it.bio=$('mgrStaffBio'+i)?.value||'';});send({type:'rerender-staff',items:d.administration});markDirty();showStaffManager();};
+ $('addStaffFromManager').onclick=addStaff;
+}
+function addGallery(){const d=sectionData();d.items=Array.isArray(d.items)?d.items:[];const i=d.items.length;d.items.push({caption:'New photo',category:'campus',image:'',mediaUrl:'',mediaType:'image',createdAt:new Date().toISOString()});send({type:'rerender-gallery',items:d.items});markDirty();selectGallery({index:i,caption:'New photo',category:'campus',image:'',createdAt:d.items[i].createdAt});}
+function addStaff(){const d=sectionData();d.administration=Array.isArray(d.administration)?d.administration:[];const i=d.administration.length;d.administration.push({name:'New Staff Member',role:'Role / Department',bio:'',image:''});send({type:'rerender-staff',items:d.administration});markDirty();selectStaff({index:i,name:'New Staff Member',role:'Role / Department',bio:'',image:''});}
+function addNews(){const d=sectionData();d.items=Array.isArray(d.items)?d.items:[];const i=d.items.length;const now=new Date();const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];const today=months[now.getMonth()]+' '+now.getFullYear();d.items.push({title:'New announcement',date:today,category:'Announcements',excerpt:'',mediaType:'',mediaUrl:''});send({type:'rerender-news',items:d.items});markDirty();selectNews({index:i,title:'New announcement',date:today,category:'Announcements',excerpt:''});}
+function send(msg){$('site').contentWindow.postMessage({source:'tsa-visual-editor',...msg},location.origin);}
+function showPageTools(){
+ const extra=[];
+ if(currentSection==='index')extra.push('<button class="primary" id="manageSlides">Manage homepage slideshow</button>');
+ if(currentSection==='administration')extra.push('<button class="primary" id="manageStaffBtn">Manage administration</button><button class="secondary" id="addStaffBtn">+ Add staff member</button>');
+ if(currentSection==='gallery')extra.push('<button class="primary" id="addGalleryBtn">+ Add gallery image</button>');
+ if(currentSection==='news')extra.push('<button class="primary" id="addNewsBtn">+ Add news item</button>');
+ setSide('Select something','<p class="hint">Click any editable text or image in the website preview. You can also use the management button below for items that can be added or removed.</p>');
+ if(extra.length){const a=actions(extra.join(''));if(currentSection==='index')$('manageSlides').onclick=showSlideshowManager;if(currentSection==='administration'){ $('addStaffBtn').onclick=addStaff; $('manageStaffBtn').onclick=showStaffManager; }if(currentSection==='gallery')$('addGalleryBtn').onclick=addGallery;if(currentSection==='news')$('addNewsBtn').onclick=addNews;}
+}
+function loadPage(url){
+  url=String(url||'index.html');
+  if(!pageSection[url])url='index.html';
+  const nextSection=pageSection[url];
+  const nextSrc='/'+url+'?edit=1';
+  currentSection=nextSection;
+  showPageTools();
+  const frame=$('site');
+  const currentSrc=frame.getAttribute('data-tsa-src')||'';
+  // Page switching is an explicit editor action. Always navigate the preview
+  // to the requested page; never reuse a previous iframe URL. This prevents
+  // the preview from falling back to Home after About/News/Gallery is chosen.
+  frameReady=false;
+  loadingPage=true;
+  if(currentSrc!==nextSrc){
+    frame.setAttribute('data-tsa-src',nextSrc);
+    frame.src=nextSrc;
+  }else{
+    // Already requested page: keep the current document stable and re-hydrate.
+    send({type:'hydrate',data:sectionData()});
+    send({type:'enable'});
+    frameReady=true;
+    loadingPage=false;
+  }
+}
+function setupFrame(){
+  if(frameBound)return;
+  frameBound=true;
+  const frame=$('site');
+  frame.addEventListener('load',()=>{
+    frameReady=true;
+    loadingPage=false;
+    send({type:'enable'});
+    // Hydrate after the page's CMS script has had a chance to render.
+    setTimeout(()=>{if(frameReady)send({type:'hydrate',data:sectionData()});},350);
+  });
+}
+async function publish(){if(!dirty){setSide('Nothing to publish','<p class="hint">There are no draft changes.</p>');return;}const btn=$('publish');btn.disabled=true;btn.textContent='Publishing…';try{for(const [s,data] of Object.entries(draft))await save(s,data);dirty=false;btn.textContent='Published ✓';setTimeout(()=>btn.textContent='Publish changes',1800);setSide('Published','<p class="hint">Your changes are now live. Reload the preview to verify them.</p>');}catch(e){btn.textContent='Publish failed';setSide('Publish failed','<p class="hint">'+esc(e.message)+'</p>');}finally{btn.disabled=false;}}
+$('fileInput').addEventListener('change',async()=>{const f=$('fileInput').files&&$('fileInput').files[0];if(!f||!pendingImage)return;try{const p=pendingImage;const isVideo=f.type&&f.type.startsWith('video/');if(isVideo&&f.size>4*1024*1024)throw Error('Video is too large. Please choose a video under 4 MB.');if(!isVideo&&f.size>50*1024*1024)throw Error('Image is too large to process. Please choose an image under 50 MB.');setSide(isVideo?'Uploading media':'Optimizing image','<p class="hint">'+(isVideo?'Uploading '+esc(f.name)+'…':'Resizing and compressing '+esc(f.name)+' for '+esc(imageProfile(p).name)+'…')+'</p>');const processed=isVideo?f:await optimizeImage(f,p);const url=await upload(processed);const d=sectionData();if(p.kind==='static'){if(isVideo)throw Error('This location accepts images only.');d[p.key]=url;send({type:'set-image',key:p.key,url});}
+else if(p.kind==='staff'){if(isVideo)throw Error('Staff photos must be images.');d.administration[p.index].image=url;send({type:'set-staff',index:p.index,item:d.administration[p.index]});}
+else if(p.kind==='news'){if(isVideo)throw Error('News media must be an image.');d.items[p.index].mediaUrl=url;d.items[p.index].mediaType='image';send({type:'rerender-news',items:d.items});}
+else if(p.kind==='gallery'){d.items[p.index].image=isVideo?'':url;d.items[p.index].mediaUrl=url;d.items[p.index].mediaType=isVideo?'video':'image';send({type:'rerender-gallery',items:d.items});}
+else if(p.kind==='slideshow'){if(isVideo)throw Error('Slideshow images must be images.');d.hero_slides[p.index]=url;while(d.hero_captions.length<d.hero_slides.length)d.hero_captions.push('');send({type:'set-slideshow',slides:d.hero_slides,captions:d.hero_captions});}
+markDirty();setSide(isVideo?'Video updated':'Image updated','<p class="hint">The new media is in the draft. Publish when ready.</p>');}catch(e){setSide('Upload failed','<p class="hint">'+esc(e.message)+'</p>');}pendingImage=null;});
+$('page').onchange=()=>{if(dirty&&!confirm('You have unpublished changes. Leave this page and discard them?')){$('page').value=Object.keys(pageSection).find(k=>pageSection[k]===currentSection)||'index.html';return;}loadPage($('page').value);};
+$('reload').onclick=()=>{
+  if(dirty&&!confirm('Reload and discard unpublished changes?'))return;
+  getAll().then(x=>{
+    draft=x;dirty=false;$('publish').textContent='Publish changes';
+    const url=$('page').value;currentSection=pageSection[url];showPageTools();
+    if(frameReady){send({type:'hydrate',data:sectionData()});send({type:'enable'});}
+    else loadPage(url);
+  }).catch(e=>alert(e.message));
+};
+$('publish').onclick=publish;$('logout').onclick=async()=>{await window.tsaSupabase.auth.signOut();location.href='/admin-login.html';};$('loginBtn').onclick=async()=>{await window.tsaSupabase.auth.signOut();location.reload();};
+window.addEventListener('message',e=>{
+ if(e.origin!==location.origin||!e.data||e.data.source!=='tsa-site-editor')return;
+ const m=e.data;
+ if(m.type==='navigate'){
+   const url=String(m.url||'');
+   if(!pageSection[url])return;
+   if(dirty&&!confirm('You have unpublished changes. Leave this page and discard them?'))return;
+   $('page').value=url;
+   loadPage(url);
+   return;
+ }
+ if(m.type==='text')selectText(m);
+ else if(m.type==='journey-date')selectJourneyDate(m);
+ else if(m.type==='image')selectImage(m);
+ else if(m.type==='social')selectSocial(m);
+ else if(m.type==='slideshow')selectSlideshow(m);
+ else if(m.type==='program')selectProgram(m);
+ else if(m.type==='staff')selectStaff(m);
+ else if(m.type==='news')selectNews(m);
+ else if(m.type==='gallery')selectGallery(m);
+ else if(m.type==='add-gallery')addGallery();
+ else if(m.type==='add-staff')addStaff();
+ else if(m.type==='add-news')addNews();
+});
+
+async function adminCheck(){
+  await token();
+  const {data:{user},error:userError}=await window.tsaSupabase.auth.getUser();
+  if(userError||!user)throw Error('Please sign in.');
+  const {data,error}=await window.tsaSupabase.from('cms_admins').select('user_id,email,role').eq('user_id',user.id).maybeSingle();
+  if(error)throw Error('Administrator check failed: '+error.message);
+  if(!data)throw Error('This account is not an administrator.');
+  currentRole=data.role==='super_admin'?'superadmin':'admin';
+  return {role:currentRole,currentUserId:user.id};
+}
+async function adminApi(method,body,id){
+  if(method==='GET'){
+    const {data:{user}}=await window.tsaSupabase.auth.getUser();if(!user)throw Error('Please sign in.');
+    const {data,error}=await window.tsaSupabase.from('cms_admins').select('user_id,email,role,created_at').order('created_at',{ascending:true});
+    if(error)throw Error(error.message);
+    return {currentRole:currentRole,currentUserId:user.id,users:(data||[]).map(x=>({id:x.user_id,email:x.email||'',role:x.role==='super_admin'?'superadmin':'admin',name:'',isOwner:(x.email||'').toLowerCase()==='triumphantstandardacademy@gmail.com'}))};
+  }
+  if(method==='POST'){
+    const {data:{session}}=await window.tsaSupabase.auth.getSession();
+    if(!session)throw Error('Please sign in as a Super Admin.');
+    const res=await fetch('/.netlify/functions/admin-invite',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token},
+      body:JSON.stringify(body||{})
+    });
+    let out={};try{out=await res.json();}catch(_){out={};}
+    if(!res.ok)throw Error(out.error||'Could not add administrator.');
+    return out;
+  }
+  if(method==='PATCH'){
+    const role=body.role==='superadmin'?'super_admin':'admin';
+    const {error}=await window.tsaSupabase.from('cms_admins').update({role}).eq('user_id',body.id);if(error)throw Error(error.message);return {};
+  }
+  if(method==='DELETE'){
+    const {error}=await window.tsaSupabase.from('cms_admins').delete().eq('user_id',id);if(error)throw Error(error.message);return {};
+  }
+  throw Error('Unsupported administrator action.');
+}
+function closeAdminModal(){$('adminModal').style.display='none';}
+async function loadAdmins(){
+ const list=$('adminList'); list.innerHTML='<div class="empty">Loading…</div>';
+ try{
+   const o=await adminApi('GET');
+   if(o.currentRole!=='superadmin')throw Error('Only Super Admins can manage administrators.');
+   const rows=o.users||[];
+   if(!rows.length){list.innerHTML='<div class="empty">No administrators found.</div>';return;}
+   list.innerHTML=rows.map(u=>{
+     const role=u.role==='superadmin'?'Super Admin':'Admin';
+     const self=u.id===o.currentUserId;
+     return '<div style="border:1px solid #333;border-radius:10px;padding:12px;margin:8px 0">'+
+       '<div style="font-weight:700">'+esc(u.name||u.email)+'</div>'+
+       '<div class="hint">'+esc(u.email)+' • '+role+(self?' • You':'')+'</div>'+
+       '<div class="actions" style="margin-top:8px">'+
+       (!self&&!u.isOwner?'<button class="secondary" data-admin-role="'+esc(u.id)+'">'+(u.role==='superadmin'?'Make Admin':'Make Super Admin')+'</button><button class="danger" data-admin-remove="'+esc(u.id)+'">Remove</button>':(u.isOwner?'<span class="hint">🔒 School Owner — protected</span>':''))+
+       '</div></div>';
+   }).join('');
+   list.querySelectorAll('[data-admin-remove]').forEach(btn=>btn.onclick=async()=>{
+     if(!confirm('Remove this administrator?'))return;
+     try{await adminApi('DELETE',null,btn.getAttribute('data-admin-remove'));await loadAdmins();}
+     catch(e){$('adminMessage').textContent=e.message;}
+   });
+   list.querySelectorAll('[data-admin-role]').forEach(btn=>btn.onclick=async()=>{
+     const id=btn.getAttribute('data-admin-role');
+     const target=rows.find(x=>x.id===id);
+     const role=target&&target.role==='superadmin'?'admin':'superadmin';
+     try{await adminApi('PATCH',{id,role});await loadAdmins();}
+     catch(e){$('adminMessage').textContent=e.message;}
+   });
+ }catch(e){list.innerHTML='<div class="hint">'+esc(e.message)+'</div>';}
+}
+function openAdminModal(){
+ if(currentRole!=='superadmin')return;
+ $('adminMessage').textContent='';
+ $('adminModal').style.display='flex';
+ loadAdmins();
+}
+$('manageAdmins').onclick=openAdminModal;
+$('closeAdminModal').onclick=closeAdminModal;
+$('addAdmin').onclick=async()=>{
+ $('adminMessage').textContent='Adding administrator…';
+ try{
+   const o=await adminApi('POST',{
+     name:$('newAdminName').value.trim(),
+     email:$('newAdminEmail').value.trim(),
+     role:$('newAdminRole').value
+   });
+   $('adminMessage').textContent='Administrator added for '+o.user.email+'. If this is a new account, an invitation email was sent to the address.';
+   $('newAdminName').value='';$('newAdminEmail').value='';$('newAdminRole').value='admin';
+   await loadAdmins();
+ }catch(e){$('adminMessage').textContent=e.message;}
+};
+
+async function start(){
+ if(startInProgress||editorStarted)return;
+ startInProgress=true;
+ try{
+   await token();
+   await adminCheck();
+   draft=await getAll();
+   $('manageAdmins').style.display=currentRole==='superadmin'?'inline-block':'none';
+   $('login').style.display='none';
+   $('editor').style.display='block';
+   setupFrame();
+   editorStarted=true;
+   // Initial page is loaded exactly once. Auth/session callbacks must never
+   // reset the editor back to Home after the user has switched pages.
+   loadPage('index.html');
+ }catch(e){
+   console.error(e);
+   $('login').style.display='flex';
+   const p=$('login').querySelectorAll('p')[1];
+   if(p)p.textContent='Admin editor could not load: '+(e&&e.message?e.message:'Unknown error')+' Please refresh and try again.';
+   const btn=$('loginBtn'); if(btn)btn.textContent='Try again';
+ }finally{startInProgress=false;}
+}
+window.tsaSupabase.auth.getSession().then(({data:{session}})=>{if(session)start();}).catch(e=>console.error(e));
+window.tsaSupabase.auth.onAuthStateChange((event,session)=>{
+  if(event==='SIGNED_IN'&&session&&!editorStarted&&!startInProgress)start();
+  if(event==='SIGNED_OUT'){editorStarted=false;location.href='/admin-login.html';}
+});
+})();
+</script>
+</body>
+</html>
